@@ -1,3 +1,4 @@
 ## Topology
 
-<img src="./Diagram/Topologia-VPC_Endpoint-Gateway-Private-Subnet">
+![DIAGRAM!](./diagram/Topologia-VPC_Endpoint-Gateway-Private-Subnet.jpg)
+
