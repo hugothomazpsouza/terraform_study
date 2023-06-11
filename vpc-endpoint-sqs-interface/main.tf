@@ -6,7 +6,7 @@ locals {
             associate_public_ip_address = true
         }
 
-        ec2_app_web =  {
+        ec2_private_instance =  {
             vpc_security_group_ids      = ["${aws_security_group.private.id}"]
             subnet_id                   = module.vpc.private_subnets[0]
             associate_public_ip_address = false
@@ -130,8 +130,8 @@ resource "aws_instance" "this" {
     vpc_security_group_ids      = each.value.vpc_security_group_ids
     key_name                    = "Key-Linux-AWS"
 
-    #Assigning the IAM Role to EC2 Instance. The role permit to list, get, and put S3 Buckets. The role will assign only to the "ec2_app_web" 
-    iam_instance_profile = each.key == "ec2_app_web" ? aws_iam_instance_profile.demo-profile.name : null
+    #Assigning the IAM Role to EC2 Instance. The role permit to list, get, and put S3 Buckets. The role will assign only to the "ec2_private_instance" 
+    iam_instance_profile = each.key == "ec2_private_instance" ? aws_iam_instance_profile.demo-profile.name : null
     
     root_block_device {  
         volume_size = 20
@@ -143,35 +143,9 @@ resource "aws_instance" "this" {
 #################################################################################################################
 
 #################################################################################################################
-#Create a IAM Policy
-resource "aws_iam_role_policy" "test_policy" {
-  name = "S3_bucket_list_put_get"
-  role = aws_iam_role.test_role.id
-
-  # Terraform's "jsonencode" function converts a
-  # Terraform expression result to valid JSON syntax.
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = [
-            "s3:Get*",
-            "s3:List*",
-            "s3:Put*",
-            "s3-object-lambda:Get*",
-            "s3-object-lambda:List*",
-            "s3-object-lambda:Put*"
-        ]
-        Effect   = "Allow"
-        Resource = "*"
-      },
-    ]
-  })
-}
-
 #Create a IAM Role
-resource "aws_iam_role" "test_role" {
-  name = "EC2_list_put_get_S3_bucket"
+resource "aws_iam_role" "this" {
+  name = "EC2_SQSFullAccess"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -189,31 +163,54 @@ resource "aws_iam_role" "test_role" {
 
 }
 
+#Create a IAM Policy and assign to the IAM Role
+resource "aws_iam_role_policy" "this" {
+  name = "SQSFullAccess"
+  role = aws_iam_role.this.id
+
+  # Terraform's "jsonencode" function converts a
+  # Terraform expression result to valid JSON syntax.
+  policy = jsonencode({
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": [
+                "sqs:*"
+            ],
+            "Effect": "Allow",
+            "Resource": "*"
+        },
+    ]
+  })
+}
+
+
+
 # Create an instance profile using role
 resource "aws_iam_instance_profile" "demo-profile" {
     name = "demo_profile"
-    role = aws_iam_role.test_role.name
+    role = aws_iam_role.this.name
 }
 #################################################################################################################
 
 #################################################################################################################
-#Create a S3 bucket
-resource "aws_s3_bucket" "this" {
-  bucket = "s3-bucket-vpce-connection"
+# #Create a S3 bucket
+# resource "aws_s3_bucket" "this" {
+#   bucket = "s3-bucket-vpce-connection"
 
-  tags = {
-    Name        = "My bucket"
-    Environment = "Dev"
-    Terraform   = "True"
-  }
-}
+#   tags = {
+#     Name        = "My bucket"
+#     Environment = "Dev"
+#     Terraform   = "True"
+#   }
+# }
 #################################################################################################################
 
 #################################################################################################################
-# Create the VPC Endpoint Gateway to access the S3 bucket. Assign the endpoint to all private route tables 
-#to create a route for reaching the prefix list with all Network space belonging to the S3.
-resource "aws_vpc_endpoint" "s3" {
-  vpc_id            = module.vpc.vpc_id
-  service_name      = "com.amazonaws.us-east-1.s3"
-  route_table_ids   = module.vpc.private_route_table_ids
-}
+# # Create the VPC Endpoint Gateway to access the S3 bucket. Assign the endpoint to all private route tables 
+# #to create a route for reaching the prefix list with all Network space belonging to the S3.
+# resource "aws_vpc_endpoint" "s3" {
+#   vpc_id            = module.vpc.vpc_id
+#   service_name      = "com.amazonaws.us-east-1.s3"
+#   route_table_ids   = module.vpc.private_route_table_ids
+# }
