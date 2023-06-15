@@ -184,8 +184,6 @@ resource "aws_iam_role_policy" "this" {
   })
 }
 
-
-
 # Create an instance profile using role
 resource "aws_iam_instance_profile" "demo-profile" {
     name = "demo_profile"
@@ -194,49 +192,49 @@ resource "aws_iam_instance_profile" "demo-profile" {
 #################################################################################################################
 
 #################################################################################################################
-# #Create a S3 bucket
-# resource "aws_s3_bucket" "this" {
-#   bucket = "s3-bucket-vpce-connection"
+#Simple SQS Queue - https://www.howtoforge.com/how-to-create-an-sqs-queue-on-aws-using-terraform/
+resource "aws_sqs_queue" "this" {
+  name = "SQS-interface-vpc-endpoint-Test"
+}
 
-#   tags = {
-#     Name        = "My bucket"
-#     Environment = "Dev"
-#     Terraform   = "True"
-#   }
-# }
+resource "aws_sqs_queue_policy" "my_sqs_policy" {
+  queue_url = aws_sqs_queue.this.id
+
+  policy = <<POLICY
+{
+  "Version": "2012-10-17",
+  "Id": "sqspolicy",
+  "Statement": [
+    {
+      "Sid": "First",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "sqs:SendMessage",
+      "Resource": "${aws_sqs_queue.this.arn}"
+    }
+  ]
+}
+POLICY
+}
 #################################################################################################################
 
 #################################################################################################################
-# # Create the VPC Endpoint Gateway to access the S3 bucket. Assign the endpoint to all private route tables 
-# #to create a route for reaching the prefix list with all Network space belonging to the S3.
-# resource "aws_vpc_endpoint" "s3" {
-#   vpc_id            = module.vpc.vpc_id
-#   service_name      = "com.amazonaws.us-east-1.s3"
-#   route_table_ids   = module.vpc.private_route_table_ids
-# }
+# Create the interface VPC Endpoint to access SQS Queue service.
+resource "aws_vpc_endpoint" "sqs_this" {
+  vpc_id            = module.vpc.vpc_id
+  service_name      = "com.amazonaws.us-east-1.sqs"
+  vpc_endpoint_type = "Interface"
 
-#sqs QUEUE - https://www.howtoforge.com/how-to-create-an-sqs-queue-on-aws-using-terraform/
+  subnet_ids          = [
+    module.vpc.private_subnets[0],
+  ]
 
-# resource "aws_sqs_queue" "my_first_sqs" {
-#   name = var.sqs_name
-# }
+  security_group_ids = [
+    aws_security_group.private.id,
+  ]
 
-# resource "aws_sqs_queue_policy" "my_sqs_policy" {
-#   queue_url = aws_sqs_queue.my_first_sqs.id
+  private_dns_enabled = true
+}
 
-#   policy = <<POLICY
-# {
-#   "Version": "2012-10-17",
-#   "Id": "sqspolicy",
-#   "Statement": [
-#     {
-#       "Sid": "First",
-#       "Effect": "Allow",
-#       "Principal": "*",
-#       "Action": "sqs:SendMessage",
-#       "Resource": "${aws_sqs_queue.my_first_sqs.arn}"
-#     }
-#   ]
-# }
-# POLICY
-# }
+# Command to send a test message from ec2 instance
+# aws sqs send-message --region us-east-1 --endpoint-url https://sqs.us-east-1.amazonaws.com/ --queue-url https://sqs.us-east-1.amazonaws.com/<AWS_ACCOUNT_ID>/<SQS_QUEUE_NAME> --message-body "Hello SQS, this is test send message."
